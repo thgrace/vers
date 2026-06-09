@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestDepsDevVersions(t *testing.T) {
+func TestFetchVersionsDepsDev(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %s, want GET", r.Method)
@@ -31,28 +31,30 @@ func TestDepsDevVersions(t *testing.T) {
 	}))
 	defer server.Close()
 
-	got, err := DepsDevVersions(
+	got, err := FetchVersions(
 		context.Background(),
+		VersionProviderDepsDev,
 		"npm",
 		"@scope/pkg",
 		WithDepsDevBaseURL(server.URL+"/v3"),
 		serverHTTPClient(server),
 	)
 	if err != nil {
-		t.Fatalf("DepsDevVersions() error = %v", err)
+		t.Fatalf("FetchVersions() error = %v", err)
 	}
 	want := []string{"1.0.0", "1.5.0", "2.0.0"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("DepsDevVersions() = %#v, want %#v", got, want)
+		t.Fatalf("FetchVersions() = %#v, want %#v", got, want)
 	}
 }
 
-func TestMatchingVersionsFromDepsDev(t *testing.T) {
+func TestMatchingVersionsFromProviderDepsDev(t *testing.T) {
 	server := depsDevVersionServer(t, "PYPI", "demo", []string{"1.4.1", "1.4.2", "1.4.9", "1.5.0"})
 	defer server.Close()
 
-	got, err := MatchingVersionsFromDepsDev(
+	got, err := MatchingVersionsFromProvider(
 		context.Background(),
+		VersionProviderDepsDev,
 		"demo",
 		"~=1.4.2",
 		"pypi",
@@ -60,20 +62,21 @@ func TestMatchingVersionsFromDepsDev(t *testing.T) {
 		serverHTTPClient(server),
 	)
 	if err != nil {
-		t.Fatalf("MatchingVersionsFromDepsDev() error = %v", err)
+		t.Fatalf("MatchingVersionsFromProvider() error = %v", err)
 	}
 	want := []string{"1.4.2", "1.4.9"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("MatchingVersionsFromDepsDev() = %#v, want %#v", got, want)
+		t.Fatalf("MatchingVersionsFromProvider() = %#v, want %#v", got, want)
 	}
 }
 
-func TestMatchingVersionsFromDepsDevVersURI(t *testing.T) {
+func TestMatchingVersionsFromProviderDepsDevVersURI(t *testing.T) {
 	server := depsDevVersionServer(t, "NPM", "demo", []string{"1.0.0", "1.4.0", "1.5.0", "2.0.0"})
 	defer server.Close()
 
-	got, err := MatchingVersionsFromDepsDev(
+	got, err := MatchingVersionsFromProvider(
 		context.Background(),
+		VersionProviderDepsDev,
 		"demo",
 		"vers:npm/>=1.0.0|<2.0.0|!=1.5.0",
 		"",
@@ -81,11 +84,11 @@ func TestMatchingVersionsFromDepsDevVersURI(t *testing.T) {
 		serverHTTPClient(server),
 	)
 	if err != nil {
-		t.Fatalf("MatchingVersionsFromDepsDev() error = %v", err)
+		t.Fatalf("MatchingVersionsFromProvider() error = %v", err)
 	}
 	want := []string{"1.0.0", "1.4.0"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("MatchingVersionsFromDepsDev() = %#v, want %#v", got, want)
+		t.Fatalf("MatchingVersionsFromProvider() = %#v, want %#v", got, want)
 	}
 }
 
@@ -119,7 +122,7 @@ func TestFetchVersionsEcosystems(t *testing.T) {
 	}
 }
 
-func TestEcosystemsVersionsCustomRegistry(t *testing.T) {
+func TestFetchVersionsEcosystemsCustomRegistry(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.URL.EscapedPath(), "/api/v1/registries/custom.example/packages/%40scope%2Fpkg/version_numbers"; got != want {
 			t.Errorf("path = %s, want %s", got, want)
@@ -128,8 +131,9 @@ func TestEcosystemsVersionsCustomRegistry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	got, err := EcosystemsVersions(
+	got, err := FetchVersions(
 		context.Background(),
+		VersionProviderEcosystems,
 		"custom",
 		"@scope/pkg",
 		WithEcosystemsBaseURL(server.URL+"/api/v1"),
@@ -137,20 +141,21 @@ func TestEcosystemsVersionsCustomRegistry(t *testing.T) {
 		WithVersionHTTPClient(server.Client()),
 	)
 	if err != nil {
-		t.Fatalf("EcosystemsVersions() error = %v", err)
+		t.Fatalf("FetchVersions() error = %v", err)
 	}
 	want := []string{"1.0.0"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("EcosystemsVersions() = %#v, want %#v", got, want)
+		t.Fatalf("FetchVersions() = %#v, want %#v", got, want)
 	}
 }
 
-func TestMatchingVersionsFromEcosystems(t *testing.T) {
+func TestMatchingVersionsFromProviderEcosystems(t *testing.T) {
 	server := ecosystemsVersionServer(t, "pypi.org", "transformers", []string{"4.52.4", "4.53.0", "4.57.3"})
 	defer server.Close()
 
-	got, err := MatchingVersionsFromEcosystems(
+	got, err := MatchingVersionsFromProvider(
 		context.Background(),
+		VersionProviderEcosystems,
 		"transformers",
 		"<4.53.0",
 		"pypi",
@@ -158,11 +163,11 @@ func TestMatchingVersionsFromEcosystems(t *testing.T) {
 		WithVersionHTTPClient(server.Client()),
 	)
 	if err != nil {
-		t.Fatalf("MatchingVersionsFromEcosystems() error = %v", err)
+		t.Fatalf("MatchingVersionsFromProvider() error = %v", err)
 	}
 	want := []string{"4.52.4"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("MatchingVersionsFromEcosystems() = %#v, want %#v", got, want)
+		t.Fatalf("MatchingVersionsFromProvider() = %#v, want %#v", got, want)
 	}
 }
 
@@ -188,10 +193,10 @@ func TestMatchingVersionsFromProviderEcosystemsVersURI(t *testing.T) {
 	}
 }
 
-func TestDepsDevVersionsUnsupportedScheme(t *testing.T) {
-	_, err := DepsDevVersions(context.Background(), "rpm", "demo")
+func TestFetchVersionsDepsDevUnsupportedScheme(t *testing.T) {
+	_, err := FetchVersions(context.Background(), VersionProviderDepsDev, "rpm", "demo")
 	if err == nil {
-		t.Fatal("DepsDevVersions() error = nil, want non-nil")
+		t.Fatal("FetchVersions() error = nil, want non-nil")
 	}
 }
 
@@ -202,28 +207,29 @@ func TestFetchVersionsUnsupportedProvider(t *testing.T) {
 	}
 }
 
-func TestMatchingVersionsFromDepsDevRequiresSchemeForNativeConstraint(t *testing.T) {
-	_, err := MatchingVersionsFromDepsDev(context.Background(), "demo", "^1.0.0", "")
+func TestMatchingVersionsFromProviderRequiresSchemeForNativeConstraint(t *testing.T) {
+	_, err := MatchingVersionsFromProvider(context.Background(), VersionProviderDepsDev, "demo", "^1.0.0", "")
 	if err == nil {
-		t.Fatal("MatchingVersionsFromDepsDev() error = nil, want non-nil")
+		t.Fatal("MatchingVersionsFromProvider() error = nil, want non-nil")
 	}
 }
 
-func TestDepsDevVersionsHTTPError(t *testing.T) {
+func TestFetchVersionsHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 	}))
 	defer server.Close()
 
-	_, err := DepsDevVersions(
+	_, err := FetchVersions(
 		context.Background(),
+		VersionProviderDepsDev,
 		"npm",
 		"missing",
 		WithDepsDevBaseURL(server.URL+"/v3"),
 		serverHTTPClient(server),
 	)
 	if err == nil {
-		t.Fatal("DepsDevVersions() error = nil, want non-nil")
+		t.Fatal("FetchVersions() error = nil, want non-nil")
 	}
 }
 
@@ -261,6 +267,6 @@ func ecosystemsVersionServer(t *testing.T, registry, name string, versions []str
 	}))
 }
 
-func serverHTTPClient(server *httptest.Server) DepsDevOption {
-	return WithDepsDevHTTPClient(server.Client())
+func serverHTTPClient(server *httptest.Server) VersionFetchOption {
+	return WithVersionHTTPClient(server.Client())
 }

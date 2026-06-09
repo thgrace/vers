@@ -122,10 +122,6 @@ matches, _ = vers.MatchingVersionsFromProvider(ctx, vers.VersionProviderEcosyste
 fmt.Println(matches)
 ```
 
-The provider-specific helpers remain available for convenience:
-`DepsDevVersions`, `MatchingVersionsFromDepsDev`, `EcosystemsVersions`, and
-`MatchingVersionsFromEcosystems`.
-
 ### Compare Versions
 
 ```go

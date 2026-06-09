@@ -27,9 +27,6 @@ const (
 // VersionFetchOption configures version fetching helpers.
 type VersionFetchOption func(*versionFetchConfig)
 
-// DepsDevOption is kept as an alias for backwards-compatible deps.dev helpers.
-type DepsDevOption = VersionFetchOption
-
 type versionFetchConfig struct {
 	depsDevBaseURL     string
 	ecosystemsBaseURL  string
@@ -85,11 +82,6 @@ func WithVersionHTTPClient(client *http.Client) VersionFetchOption {
 	}
 }
 
-// WithDepsDevHTTPClient overrides the HTTP client used by deps.dev helpers.
-func WithDepsDevHTTPClient(client *http.Client) VersionFetchOption {
-	return WithVersionHTTPClient(client)
-}
-
 // FetchVersions returns versions known by provider for packageName in scheme.
 //
 // Supported providers are VersionProviderDepsDev and VersionProviderEcosystems.
@@ -125,39 +117,6 @@ func MatchingVersionsFromProvider(ctx context.Context, provider VersionProvider,
 		return nil, err
 	}
 	return MatchingVersions(versions, constraint, scheme)
-}
-
-// DepsDevVersions returns the versions known by deps.dev for packageName in
-// scheme. The package name must use the package ecosystem's native package name.
-//
-// Supported schemes are npm, pypi, gem/rubygems, maven, nuget, cargo, and
-// go/golang.
-func DepsDevVersions(ctx context.Context, scheme, packageName string, opts ...DepsDevOption) ([]string, error) {
-	return FetchVersions(ctx, VersionProviderDepsDev, scheme, packageName, opts...)
-}
-
-// MatchingVersionsFromDepsDev fetches known package versions from deps.dev and
-// returns the versions that match constraint under scheme.
-//
-// If scheme is empty, constraint must be a vers URI and the deps.dev system is
-// derived from that URI. Otherwise, constraint is parsed as native package
-// manager syntax for scheme.
-func MatchingVersionsFromDepsDev(ctx context.Context, packageName, constraint, scheme string, opts ...DepsDevOption) ([]string, error) {
-	return MatchingVersionsFromProvider(ctx, VersionProviderDepsDev, packageName, constraint, scheme, opts...)
-}
-
-// EcosystemsVersions returns the versions known by packages.ecosyste.ms for
-// packageName in scheme. The package name must use the package ecosystem's
-// native package name.
-func EcosystemsVersions(ctx context.Context, scheme, packageName string, opts ...VersionFetchOption) ([]string, error) {
-	return FetchVersions(ctx, VersionProviderEcosystems, scheme, packageName, opts...)
-}
-
-// MatchingVersionsFromEcosystems fetches known package versions from
-// packages.ecosyste.ms and returns the versions that match constraint under
-// scheme.
-func MatchingVersionsFromEcosystems(ctx context.Context, packageName, constraint, scheme string, opts ...VersionFetchOption) ([]string, error) {
-	return MatchingVersionsFromProvider(ctx, VersionProviderEcosystems, packageName, constraint, scheme, opts...)
 }
 
 func fetchDepsDevVersions(ctx context.Context, scheme, packageName string, opts ...VersionFetchOption) ([]string, error) {
