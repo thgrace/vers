@@ -5,7 +5,7 @@ A Go implementation of the [VERS specification](https://github.com/package-url/p
 ## Installation
 
 ```bash
-go get github.com/git-pkgs/vers
+go get github.com/thgrace/vers
 ```
 
 ## Usage
@@ -19,7 +19,7 @@ package main
 
 import (
     "fmt"
-    "github.com/git-pkgs/vers"
+    "github.com/thgrace/vers"
 )
 
 func main() {
