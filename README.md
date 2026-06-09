@@ -80,6 +80,24 @@ ok, _ = vers.Satisfies("1.5.0", "^1.0.0", "npm")
 fmt.Println(ok)  // true
 ```
 
+### Filter Candidate Versions
+
+Range libraries do not discover package versions from registries. Fetch or load
+the available versions in your application, then pass them to `Satisfying`.
+Results preserve the input order of the candidate slice.
+
+```go
+// Example: versions discovered from a registry or database fill pipeline.
+available := []string{"1.0.0", "1.5.0", "2.0.0", "2.1.0"}
+
+matches, _ := vers.Satisfying(available, "^1.0.0", "npm")
+fmt.Println(matches)  // [1.0.0 1.5.0]
+
+// VERS URI input uses an empty scheme, consistent with Satisfies.
+matches, _ = vers.Satisfying(available, "vers:npm/>=2.0.0|<3.0.0", "")
+fmt.Println(matches)  // [2.0.0 2.1.0]
+```
+
 ### Compare Versions
 
 ```go

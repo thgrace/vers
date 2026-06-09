@@ -16,6 +16,9 @@
 //	// Check if version satisfies constraint
 //	vers.Satisfies("1.5.0", ">=1.0.0,<2.0.0", "npm") // true
 //
+//	// Filter caller-supplied candidate versions
+//	vers.Satisfying([]string{"1.0.0", "1.5.0", "2.0.0"}, "^1.0.0", "npm") // ["1.0.0", "1.5.0"]
+//
 //	// Compare versions
 //	vers.Compare("1.2.3", "1.2.4") // -1
 //
@@ -56,19 +59,37 @@ func ParseNative(constraint string, scheme string) (*Range, error) {
 // If scheme is empty, constraint is parsed as a vers URI.
 // Otherwise, constraint is parsed as native package manager syntax.
 func Satisfies(version, constraint, scheme string) (bool, error) {
-	var r *Range
-	var err error
-
-	if scheme == "" {
-		r, err = Parse(constraint)
-	} else {
-		r, err = ParseNative(constraint, scheme)
-	}
+	r, err := parseRangeForScheme(constraint, scheme)
 	if err != nil {
 		return false, err
 	}
 
 	return r.Contains(version), nil
+}
+
+// Satisfying returns the versions in versions that satisfy constraint under the
+// given scheme. The returned versions preserve their input order and versions
+// that do not satisfy the range, including versions considered invalid by the
+// existing range containment behavior, are skipped.
+//
+// This function only filters the caller-supplied candidates; it does not fetch
+// or discover versions from registries.
+//
+// If scheme is empty, constraint is parsed as a vers URI. Otherwise, constraint
+// is parsed as native package manager syntax.
+func Satisfying(versions []string, constraint, scheme string) ([]string, error) {
+	r, err := parseRangeForScheme(constraint, scheme)
+	if err != nil {
+		return nil, err
+	}
+
+	matches := make([]string, 0, len(versions))
+	for _, v := range versions {
+		if r.Contains(v) {
+			matches = append(matches, v)
+		}
+	}
+	return matches, nil
 }
 
 // Compare compares two version strings.
@@ -89,13 +110,7 @@ func Compare(a, b string) int {
 //
 // If scheme is empty, constraint is parsed as a vers URI.
 func HighestSatisfying(versions []string, constraint, scheme string) (string, error) {
-	var r *Range
-	var err error
-	if scheme == "" {
-		r, err = Parse(constraint)
-	} else {
-		r, err = ParseNative(constraint, scheme)
-	}
+	r, err := parseRangeForScheme(constraint, scheme)
 	if err != nil {
 		return "", err
 	}
@@ -155,6 +170,13 @@ func Empty() *Range {
 // ToVersString converts a Range back to a vers URI string.
 func ToVersString(r *Range, scheme string) string {
 	return defaultParser.ToVersString(r, scheme)
+}
+
+func parseRangeForScheme(constraint, scheme string) (*Range, error) {
+	if scheme == "" {
+		return Parse(constraint)
+	}
+	return ParseNative(constraint, scheme)
 }
 
 var defaultParser = NewParser()
