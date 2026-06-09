@@ -98,25 +98,33 @@ matches, _ = vers.MatchingVersions(available, "vers:npm/>=2.0.0|<3.0.0", "")
 fmt.Println(matches)  // [2.0.0 2.1.0]
 ```
 
-### Fetch Matching Versions From deps.dev
+### Fetch Matching Versions From Metadata Providers
 
-The deps.dev helpers fetch the package's known versions from the deps.dev API,
-then reuse `MatchingVersions` locally. Supported deps.dev schemes are `npm`,
-`pypi`, `gem`/`rubygems`, `maven`, `nuget`, `cargo`, and `go`/`golang`.
+Provider helpers fetch a package's known versions, then reuse
+`MatchingVersions` locally. Built-in providers are `VersionProviderDepsDev` and
+`VersionProviderEcosystems`.
 
 ```go
 ctx := context.Background()
 
-versions, _ := vers.DepsDevVersions(ctx, "npm", "react")
+versions, _ := vers.FetchVersions(ctx, vers.VersionProviderDepsDev, "npm", "react")
 fmt.Println(versions)
 
-matches, _ := vers.MatchingVersionsFromDepsDev(ctx, "react", "^18.0.0", "npm")
+matches, _ := vers.MatchingVersionsFromProvider(ctx, vers.VersionProviderDepsDev, "react", "^18.0.0", "npm")
 fmt.Println(matches)
 
-// VERS URI input can derive the deps.dev system from the URI scheme.
-matches, _ = vers.MatchingVersionsFromDepsDev(ctx, "react", "vers:npm/>=18.0.0|<19.0.0", "")
+// VERS URI input can derive the provider ecosystem from the URI scheme.
+matches, _ = vers.MatchingVersionsFromProvider(ctx, vers.VersionProviderDepsDev, "react", "vers:npm/>=18.0.0|<19.0.0", "")
+fmt.Println(matches)
+
+// ecosyste.ms is available through the same API.
+matches, _ = vers.MatchingVersionsFromProvider(ctx, vers.VersionProviderEcosystems, "transformers", "<4.53.0", "pypi")
 fmt.Println(matches)
 ```
+
+The provider-specific helpers remain available for convenience:
+`DepsDevVersions`, `MatchingVersionsFromDepsDev`, `EcosystemsVersions`, and
+`MatchingVersionsFromEcosystems`.
 
 ### Compare Versions
 
