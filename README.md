@@ -82,9 +82,9 @@ fmt.Println(ok)  // true
 
 ### Filter Candidate Versions
 
-Range libraries do not discover package versions from registries. Fetch or load
-the available versions in your application, then pass them to `MatchingVersions`.
-Results preserve the input order of the candidate slice.
+When you already have available versions from a registry, database, or fixture,
+pass them to `MatchingVersions`. Results preserve the input order of the
+candidate slice.
 
 ```go
 // Example: versions discovered from a registry or database fill pipeline.
@@ -96,6 +96,26 @@ fmt.Println(matches)  // [1.0.0 1.5.0]
 // VERS URI input uses an empty scheme, consistent with Satisfies.
 matches, _ = vers.MatchingVersions(available, "vers:npm/>=2.0.0|<3.0.0", "")
 fmt.Println(matches)  // [2.0.0 2.1.0]
+```
+
+### Fetch Matching Versions From deps.dev
+
+The deps.dev helpers fetch the package's known versions from the deps.dev API,
+then reuse `MatchingVersions` locally. Supported deps.dev schemes are `npm`,
+`pypi`, `gem`/`rubygems`, `maven`, `nuget`, `cargo`, and `go`/`golang`.
+
+```go
+ctx := context.Background()
+
+versions, _ := vers.DepsDevVersions(ctx, "npm", "react")
+fmt.Println(versions)
+
+matches, _ := vers.MatchingVersionsFromDepsDev(ctx, "react", "^18.0.0", "npm")
+fmt.Println(matches)
+
+// VERS URI input can derive the deps.dev system from the URI scheme.
+matches, _ = vers.MatchingVersionsFromDepsDev(ctx, "react", "vers:npm/>=18.0.0|<19.0.0", "")
+fmt.Println(matches)
 ```
 
 ### Compare Versions
