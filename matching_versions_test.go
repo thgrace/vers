@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestSatisfying(t *testing.T) {
+func TestMatchingVersions(t *testing.T) {
 	tests := []struct {
 		name       string
 		versions   []string
@@ -66,20 +66,20 @@ func TestSatisfying(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Satisfying(tt.versions, tt.constraint, tt.scheme)
+			got, err := MatchingVersions(tt.versions, tt.constraint, tt.scheme)
 			if err != nil {
-				t.Fatalf("Satisfying() error = %v", err)
+				t.Fatalf("MatchingVersions() error = %v", err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Satisfying() = %#v, want %#v", got, tt.want)
+				t.Errorf("MatchingVersions() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestSatisfyingInvalidConstraint(t *testing.T) {
-	_, err := Satisfying([]string{"1.0.0"}, ">", "npm")
+func TestMatchingVersionsInvalidConstraint(t *testing.T) {
+	_, err := MatchingVersions([]string{"1.0.0"}, ">", "npm")
 	if err == nil {
-		t.Fatal("Satisfying() error = nil, want non-nil")
+		t.Fatal("MatchingVersions() error = nil, want non-nil")
 	}
 }

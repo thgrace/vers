@@ -17,7 +17,7 @@
 //	vers.Satisfies("1.5.0", ">=1.0.0,<2.0.0", "npm") // true
 //
 //	// Filter caller-supplied candidate versions
-//	vers.Satisfying([]string{"1.0.0", "1.5.0", "2.0.0"}, "^1.0.0", "npm") // ["1.0.0", "1.5.0"]
+//	vers.MatchingVersions([]string{"1.0.0", "1.5.0", "2.0.0"}, "^1.0.0", "npm") // ["1.0.0", "1.5.0"]
 //
 //	// Compare versions
 //	vers.Compare("1.2.3", "1.2.4") // -1
@@ -67,17 +67,17 @@ func Satisfies(version, constraint, scheme string) (bool, error) {
 	return r.Contains(version), nil
 }
 
-// Satisfying returns the versions in versions that satisfy constraint under the
-// given scheme. The returned versions preserve their input order and versions
-// that do not satisfy the range, including versions considered invalid by the
-// existing range containment behavior, are skipped.
+// MatchingVersions returns the versions in versions that match constraint under
+// the given scheme. The returned versions preserve their input order and
+// versions that do not match the range, including versions considered invalid by
+// the existing range containment behavior, are skipped.
 //
 // This function only filters the caller-supplied candidates; it does not fetch
 // or discover versions from registries.
 //
 // If scheme is empty, constraint is parsed as a vers URI. Otherwise, constraint
 // is parsed as native package manager syntax.
-func Satisfying(versions []string, constraint, scheme string) ([]string, error) {
+func MatchingVersions(versions []string, constraint, scheme string) ([]string, error) {
 	r, err := parseRangeForScheme(constraint, scheme)
 	if err != nil {
 		return nil, err
