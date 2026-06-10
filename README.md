@@ -242,6 +242,18 @@ Run specific benchmarks:
 go test -bench=BenchmarkContains -benchmem
 ```
 
+## Security
+
+Please report suspected vulnerabilities privately. See [SECURITY.md](SECURITY.md)
+for supported versions, reporting instructions, and response expectations.
+
+Tagged releases publish a source archive and checksums with GitHub artifact
+attestations. Release assets can be verified with:
+
+```bash
+gh attestation verify vers-<tag>.tar.gz -R thgrace/vers
+```
+
 ## License
 
 MIT

@@ -24,7 +24,7 @@ func TestFetchVersionsDepsDev(t *testing.T) {
 		if got := r.Header.Get("User-Agent"); got != defaultUserAgent {
 			t.Errorf("User-Agent = %q, want %q", got, defaultUserAgent)
 		}
-		fmt.Fprint(w, `{
+		writeResponse(t, w, `{
 			"versions": [
 				{"versionKey": {"system": "NPM", "name": "@scope/pkg", "version": "1.0.0"}},
 				{"versionKey": {"system": "NPM", "name": "@scope/pkg", "version": "1.5.0"}},
@@ -107,7 +107,7 @@ func TestFetchVersionsEcosystems(t *testing.T) {
 		if got, want := r.Header.Get("User-Agent"), "custom-client/1.0"; got != want {
 			t.Errorf("User-Agent = %q, want %q", got, want)
 		}
-		fmt.Fprint(w, `["4.52.4","4.53.0","4.57.3"]`)
+		writeResponse(t, w, `["4.52.4","4.53.0","4.57.3"]`)
 	}))
 	defer server.Close()
 
@@ -135,7 +135,7 @@ func TestFetchVersionsEcosystemsCustomRegistry(t *testing.T) {
 		if got, want := r.URL.EscapedPath(), "/api/v1/registries/custom.example/packages/%40scope%2Fpkg/version_numbers"; got != want {
 			t.Errorf("path = %s, want %s", got, want)
 		}
-		fmt.Fprint(w, `["1.0.0"]`)
+		writeResponse(t, w, `["1.0.0"]`)
 	}))
 	defer server.Close()
 
@@ -243,7 +243,7 @@ func TestFetchVersionsHTTPError(t *testing.T) {
 
 func TestFetchVersionsSuccessBodyTooLarge(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, strings.Repeat(" ", maxSuccessResponseBodyBytes+1))
+		writeResponse(t, w, strings.Repeat(" ", maxSuccessResponseBodyBytes+1))
 	}))
 	defer server.Close()
 
@@ -269,14 +269,14 @@ func depsDevVersionServer(t *testing.T, system, name string, versions []string) 
 		if got, want := r.URL.EscapedPath(), "/v3/systems/"+system+"/packages/"+name; got != want {
 			t.Errorf("path = %s, want %s", got, want)
 		}
-		fmt.Fprint(w, `{"versions":[`)
+		writeResponse(t, w, `{"versions":[`)
 		for i, version := range versions {
 			if i > 0 {
-				fmt.Fprint(w, `,`)
+				writeResponse(t, w, `,`)
 			}
-			fmt.Fprintf(w, `{"versionKey":{"system":%q,"name":%q,"version":%q}}`, system, name, version)
+			writeResponsef(t, w, `{"versionKey":{"system":%q,"name":%q,"version":%q}}`, system, name, version)
 		}
-		fmt.Fprint(w, `]}`)
+		writeResponse(t, w, `]}`)
 	}))
 }
 
@@ -286,17 +286,31 @@ func ecosystemsVersionServer(t *testing.T, registry, name string, versions []str
 		if got, want := r.URL.EscapedPath(), "/api/v1/registries/"+registry+"/packages/"+name+"/version_numbers"; got != want {
 			t.Errorf("path = %s, want %s", got, want)
 		}
-		fmt.Fprint(w, `[`)
+		writeResponse(t, w, `[`)
 		for i, version := range versions {
 			if i > 0 {
-				fmt.Fprint(w, `,`)
+				writeResponse(t, w, `,`)
 			}
-			fmt.Fprintf(w, `%q`, version)
+			writeResponsef(t, w, `%q`, version)
 		}
-		fmt.Fprint(w, `]`)
+		writeResponse(t, w, `]`)
 	}))
 }
 
 func serverHTTPClient(server *httptest.Server) VersionFetchOption {
 	return WithVersionHTTPClient(server.Client())
+}
+
+func writeResponse(t *testing.T, w http.ResponseWriter, body string) {
+	t.Helper()
+	if _, err := fmt.Fprint(w, body); err != nil {
+		t.Errorf("write response: %v", err)
+	}
+}
+
+func writeResponsef(t *testing.T, w http.ResponseWriter, format string, args ...any) {
+	t.Helper()
+	if _, err := fmt.Fprintf(w, format, args...); err != nil {
+		t.Errorf("write response: %v", err)
+	}
 }
