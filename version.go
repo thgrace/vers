@@ -631,8 +631,8 @@ func normalizeMavenComponents(components []mavenComponent) []mavenComponent {
 		}
 		if baseEnd < firstSublistIdx {
 			// Rebuild: base without trailing zeros + sublist portion
-			newComponents := make([]mavenComponent, baseEnd)
-			copy(newComponents, components[:baseEnd])
+			newComponents := make([]mavenComponent, 0, baseEnd+len(components)-firstSublistIdx)
+			newComponents = append(newComponents, components[:baseEnd]...)
 			newComponents = append(newComponents, components[firstSublistIdx:]...)
 			components = newComponents
 		}
