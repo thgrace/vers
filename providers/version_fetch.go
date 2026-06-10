@@ -1,4 +1,4 @@
-package vers
+package providers
 
 import (
 	"context"
@@ -9,10 +9,15 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/thgrace/vers"
 )
 
 const defaultDepsDevBaseURL = "https://api.deps.dev/v3"
 const defaultEcosystemsBaseURL = "https://packages.ecosyste.ms/api/v1"
+const defaultUserAgent = "github.com/thgrace/vers/providers"
+const maxErrorResponseBodyBytes = 4096
+const maxSuccessResponseBodyBytes = 10 << 20
 
 // VersionProvider identifies a package version metadata provider.
 type VersionProvider string
@@ -33,6 +38,7 @@ type versionFetchConfig struct {
 	ecosystemsMailto   string
 	ecosystemsRegistry string
 	httpClient         *http.Client
+	userAgent          string
 }
 
 // WithDepsDevBaseURL overrides the deps.dev API base URL.
@@ -82,6 +88,15 @@ func WithVersionHTTPClient(client *http.Client) VersionFetchOption {
 	}
 }
 
+// WithVersionUserAgent overrides the User-Agent header used by version fetch helpers.
+func WithVersionUserAgent(userAgent string) VersionFetchOption {
+	return func(c *versionFetchConfig) {
+		if strings.TrimSpace(userAgent) != "" {
+			c.userAgent = strings.TrimSpace(userAgent)
+		}
+	}
+}
+
 // FetchVersions returns versions known by provider for packageName in scheme.
 //
 // Supported providers are VersionProviderDepsDev and VersionProviderEcosystems.
@@ -116,7 +131,7 @@ func MatchingVersionsFromProvider(ctx context.Context, provider VersionProvider,
 	if err != nil {
 		return nil, err
 	}
-	return MatchingVersions(versions, constraint, scheme)
+	return vers.MatchingVersions(versions, constraint, scheme)
 }
 
 func fetchDepsDevVersions(ctx context.Context, scheme, packageName string, opts ...VersionFetchOption) ([]string, error) {
@@ -136,7 +151,7 @@ func fetchDepsDevVersions(ctx context.Context, scheme, packageName string, opts 
 	cfg := applyVersionFetchOptions(opts)
 	endpoint := cfg.depsDevBaseURL + "/systems/" + escapeURLPathSegment(system) + "/packages/" + escapeURLPathSegment(packageName)
 	var payload depsDevPackageResponse
-	if err := fetchJSON(ctx, cfg.httpClient, endpoint, "deps.dev package versions", &payload); err != nil {
+	if err := fetchJSON(ctx, cfg.httpClient, cfg.userAgent, endpoint, "deps.dev package versions", &payload); err != nil {
 		return nil, err
 	}
 
@@ -174,7 +189,7 @@ func fetchEcosystemsVersions(ctx context.Context, scheme, packageName string, op
 	}
 
 	var versions []string
-	err := fetchJSON(ctx, cfg.httpClient, endpoint, "ecosyste.ms package versions", &versions)
+	err := fetchJSON(ctx, cfg.httpClient, cfg.userAgent, endpoint, "ecosyste.ms package versions", &versions)
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +215,7 @@ func applyVersionFetchOptions(opts []VersionFetchOption) versionFetchConfig {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		userAgent: defaultUserAgent,
 	}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -270,12 +286,15 @@ func schemeFromVersURI(constraint string) (string, error) {
 	return scheme, nil
 }
 
-func fetchJSON(ctx context.Context, client *http.Client, endpoint, description string, dst any) error {
+func fetchJSON(ctx context.Context, client *http.Client, userAgent, endpoint, description string, dst any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("create %s request: %w", description, err)
 	}
 	req.Header.Set("Accept", "application/json")
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -284,11 +303,19 @@ func fetchJSON(ctx context.Context, client *http.Client, endpoint, description s
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorResponseBodyBytes))
 		return fmt.Errorf("%s request failed with status %d: %s", description, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSuccessResponseBodyBytes+1))
+	if err != nil {
+		return fmt.Errorf("read %s response: %w", description, err)
+	}
+	if len(body) > maxSuccessResponseBodyBytes {
+		return fmt.Errorf("%s response exceeds %d bytes", description, maxSuccessResponseBodyBytes)
+	}
+
+	if err := json.Unmarshal(body, dst); err != nil {
 		return fmt.Errorf("decode %s response: %w", description, err)
 	}
 	return nil

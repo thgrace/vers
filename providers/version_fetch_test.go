@@ -1,4 +1,4 @@
-package vers
+package providers
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -19,6 +20,9 @@ func TestFetchVersionsDepsDev(t *testing.T) {
 		}
 		if got := r.Header.Get("Accept"); got != "application/json" {
 			t.Errorf("Accept = %q, want application/json", got)
+		}
+		if got := r.Header.Get("User-Agent"); got != defaultUserAgent {
+			t.Errorf("User-Agent = %q, want %q", got, defaultUserAgent)
 		}
 		fmt.Fprint(w, `{
 			"versions": [
@@ -100,6 +104,9 @@ func TestFetchVersionsEcosystems(t *testing.T) {
 		if got, want := r.URL.Query().Get("mailto"), "maintainer@example.com"; got != want {
 			t.Errorf("mailto = %q, want %q", got, want)
 		}
+		if got, want := r.Header.Get("User-Agent"), "custom-client/1.0"; got != want {
+			t.Errorf("User-Agent = %q, want %q", got, want)
+		}
 		fmt.Fprint(w, `["4.52.4","4.53.0","4.57.3"]`)
 	}))
 	defer server.Close()
@@ -112,6 +119,7 @@ func TestFetchVersionsEcosystems(t *testing.T) {
 		WithEcosystemsBaseURL(server.URL+"/api/v1"),
 		WithEcosystemsMailto("maintainer@example.com"),
 		WithVersionHTTPClient(server.Client()),
+		WithVersionUserAgent("custom-client/1.0"),
 	)
 	if err != nil {
 		t.Fatalf("FetchVersions() error = %v", err)
@@ -230,6 +238,28 @@ func TestFetchVersionsHTTPError(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("FetchVersions() error = nil, want non-nil")
+	}
+}
+
+func TestFetchVersionsSuccessBodyTooLarge(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, strings.Repeat(" ", maxSuccessResponseBodyBytes+1))
+	}))
+	defer server.Close()
+
+	_, err := FetchVersions(
+		context.Background(),
+		VersionProviderDepsDev,
+		"npm",
+		"oversized",
+		WithDepsDevBaseURL(server.URL+"/v3"),
+		serverHTTPClient(server),
+	)
+	if err == nil {
+		t.Fatal("FetchVersions() error = nil, want non-nil")
+	}
+	if got, want := err.Error(), "exceeds"; !strings.Contains(got, want) {
+		t.Fatalf("FetchVersions() error = %q, want substring %q", got, want)
 	}
 }
 

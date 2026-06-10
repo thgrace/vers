@@ -100,25 +100,27 @@ fmt.Println(matches)  // [2.0.0 2.1.0]
 
 ### Fetch Matching Versions From Metadata Providers
 
-Provider helpers fetch a package's known versions, then reuse
-`MatchingVersions` locally. Built-in providers are `VersionProviderDepsDev` and
-`VersionProviderEcosystems`.
+The `providers` subpackage can fetch a package's known versions, then reuse
+`vers.MatchingVersions` locally. Built-in providers are
+`providers.VersionProviderDepsDev` and `providers.VersionProviderEcosystems`.
 
 ```go
+import "github.com/thgrace/vers/providers"
+
 ctx := context.Background()
 
-versions, _ := vers.FetchVersions(ctx, vers.VersionProviderDepsDev, "npm", "react")
+versions, _ := providers.FetchVersions(ctx, providers.VersionProviderDepsDev, "npm", "react")
 fmt.Println(versions)
 
-matches, _ := vers.MatchingVersionsFromProvider(ctx, vers.VersionProviderDepsDev, "react", "^18.0.0", "npm")
+matches, _ := providers.MatchingVersionsFromProvider(ctx, providers.VersionProviderDepsDev, "react", "^18.0.0", "npm")
 fmt.Println(matches)
 
 // VERS URI input can derive the provider ecosystem from the URI scheme.
-matches, _ = vers.MatchingVersionsFromProvider(ctx, vers.VersionProviderDepsDev, "react", "vers:npm/>=18.0.0|<19.0.0", "")
+matches, _ = providers.MatchingVersionsFromProvider(ctx, providers.VersionProviderDepsDev, "react", "vers:npm/>=18.0.0|<19.0.0", "")
 fmt.Println(matches)
 
 // ecosyste.ms is available through the same API.
-matches, _ = vers.MatchingVersionsFromProvider(ctx, vers.VersionProviderEcosystems, "transformers", "<4.53.0", "pypi")
+matches, _ = providers.MatchingVersionsFromProvider(ctx, providers.VersionProviderEcosystems, "transformers", "<4.53.0", "pypi")
 fmt.Println(matches)
 ```
 
