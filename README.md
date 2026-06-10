@@ -5,7 +5,7 @@ A Go implementation of the [VERS specification](https://github.com/package-url/p
 ## Installation
 
 ```bash
-go get github.com/git-pkgs/vers
+go get github.com/thgrace/vers
 ```
 
 ## Usage
@@ -19,7 +19,7 @@ package main
 
 import (
     "fmt"
-    "github.com/git-pkgs/vers"
+    "github.com/thgrace/vers"
 )
 
 func main() {
@@ -78,6 +78,50 @@ fmt.Println(ok)  // true
 // Using native syntax
 ok, _ = vers.Satisfies("1.5.0", "^1.0.0", "npm")
 fmt.Println(ok)  // true
+```
+
+### Filter Candidate Versions
+
+When you already have available versions from a registry, database, or fixture,
+pass them to `MatchingVersions`. Results preserve the input order of the
+candidate slice.
+
+```go
+// Example: versions discovered from a registry or database fill pipeline.
+available := []string{"1.0.0", "1.5.0", "2.0.0", "2.1.0"}
+
+matches, _ := vers.MatchingVersions(available, "^1.0.0", "npm")
+fmt.Println(matches)  // [1.0.0 1.5.0]
+
+// VERS URI input uses an empty scheme, consistent with Satisfies.
+matches, _ = vers.MatchingVersions(available, "vers:npm/>=2.0.0|<3.0.0", "")
+fmt.Println(matches)  // [2.0.0 2.1.0]
+```
+
+### Fetch Matching Versions From Metadata Providers
+
+The `providers` subpackage can fetch a package's known versions, then reuse
+`vers.MatchingVersions` locally. Built-in providers are
+`providers.VersionProviderDepsDev` and `providers.VersionProviderEcosystems`.
+
+```go
+import "github.com/thgrace/vers/providers"
+
+ctx := context.Background()
+
+versions, _ := providers.FetchVersions(ctx, providers.VersionProviderDepsDev, "npm", "react")
+fmt.Println(versions)
+
+matches, _ := providers.MatchingVersionsFromProvider(ctx, providers.VersionProviderDepsDev, "react", "^18.0.0", "npm")
+fmt.Println(matches)
+
+// VERS URI input can derive the provider ecosystem from the URI scheme.
+matches, _ = providers.MatchingVersionsFromProvider(ctx, providers.VersionProviderDepsDev, "react", "vers:npm/>=18.0.0|<19.0.0", "")
+fmt.Println(matches)
+
+// ecosyste.ms is available through the same API.
+matches, _ = providers.MatchingVersionsFromProvider(ctx, providers.VersionProviderEcosystems, "transformers", "<4.53.0", "pypi")
+fmt.Println(matches)
 ```
 
 ### Compare Versions
