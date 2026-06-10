@@ -1,0 +1,329 @@
+package providers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/thgrace/vers"
+)
+
+const defaultDepsDevBaseURL = "https://api.deps.dev/v3"
+const defaultEcosystemsBaseURL = "https://packages.ecosyste.ms/api/v1"
+const defaultUserAgent = "github.com/thgrace/vers/providers"
+const maxErrorResponseBodyBytes = 4096
+const maxSuccessResponseBodyBytes = 10 << 20
+
+// VersionProvider identifies a package version metadata provider.
+type VersionProvider string
+
+const (
+	// VersionProviderDepsDev fetches versions from deps.dev.
+	VersionProviderDepsDev VersionProvider = "deps.dev"
+	// VersionProviderEcosystems fetches versions from packages.ecosyste.ms.
+	VersionProviderEcosystems VersionProvider = "ecosyste.ms"
+)
+
+// VersionFetchOption configures version fetching helpers.
+type VersionFetchOption func(*versionFetchConfig)
+
+type versionFetchConfig struct {
+	depsDevBaseURL     string
+	ecosystemsBaseURL  string
+	ecosystemsMailto   string
+	ecosystemsRegistry string
+	httpClient         *http.Client
+	userAgent          string
+}
+
+// WithDepsDevBaseURL overrides the deps.dev API base URL.
+//
+// This is primarily useful for tests or proxies. The default is
+// https://api.deps.dev/v3.
+func WithDepsDevBaseURL(baseURL string) VersionFetchOption {
+	return func(c *versionFetchConfig) {
+		c.depsDevBaseURL = strings.TrimRight(baseURL, "/")
+	}
+}
+
+// WithEcosystemsBaseURL overrides the packages.ecosyste.ms API base URL.
+//
+// This is primarily useful for tests or mirrors. The default is
+// https://packages.ecosyste.ms/api/v1.
+func WithEcosystemsBaseURL(baseURL string) VersionFetchOption {
+	return func(c *versionFetchConfig) {
+		c.ecosystemsBaseURL = strings.TrimRight(baseURL, "/")
+	}
+}
+
+// WithEcosystemsMailto adds a mailto query parameter to ecosyste.ms requests.
+//
+// Ecosyste.ms uses this to place requests in its polite API pool.
+func WithEcosystemsMailto(mailto string) VersionFetchOption {
+	return func(c *versionFetchConfig) {
+		c.ecosystemsMailto = strings.TrimSpace(mailto)
+	}
+}
+
+// WithEcosystemsRegistry overrides the registry used for ecosyste.ms requests.
+//
+// If unset, the registry is inferred from the scheme.
+func WithEcosystemsRegistry(registry string) VersionFetchOption {
+	return func(c *versionFetchConfig) {
+		c.ecosystemsRegistry = strings.TrimSpace(registry)
+	}
+}
+
+// WithVersionHTTPClient overrides the HTTP client used by version fetch helpers.
+func WithVersionHTTPClient(client *http.Client) VersionFetchOption {
+	return func(c *versionFetchConfig) {
+		if client != nil {
+			c.httpClient = client
+		}
+	}
+}
+
+// WithVersionUserAgent overrides the User-Agent header used by version fetch helpers.
+func WithVersionUserAgent(userAgent string) VersionFetchOption {
+	return func(c *versionFetchConfig) {
+		if strings.TrimSpace(userAgent) != "" {
+			c.userAgent = strings.TrimSpace(userAgent)
+		}
+	}
+}
+
+// FetchVersions returns versions known by provider for packageName in scheme.
+//
+// Supported providers are VersionProviderDepsDev and VersionProviderEcosystems.
+func FetchVersions(ctx context.Context, provider VersionProvider, scheme, packageName string, opts ...VersionFetchOption) ([]string, error) {
+	switch provider {
+	case VersionProviderDepsDev:
+		return fetchDepsDevVersions(ctx, scheme, packageName, opts...)
+	case VersionProviderEcosystems:
+		return fetchEcosystemsVersions(ctx, scheme, packageName, opts...)
+	default:
+		return nil, fmt.Errorf("unsupported version provider %q", provider)
+	}
+}
+
+// MatchingVersionsFromProvider fetches known package versions from provider and
+// returns the versions that match constraint under scheme.
+//
+// If scheme is empty, constraint must be a vers URI and the provider scheme is
+// derived from that URI. Otherwise, constraint is parsed as native package
+// manager syntax for scheme.
+func MatchingVersionsFromProvider(ctx context.Context, provider VersionProvider, packageName, constraint, scheme string, opts ...VersionFetchOption) ([]string, error) {
+	versionScheme := scheme
+	if versionScheme == "" {
+		var err error
+		versionScheme, err = schemeFromVersURI(constraint)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	versions, err := FetchVersions(ctx, provider, versionScheme, packageName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return vers.MatchingVersions(versions, constraint, scheme)
+}
+
+func fetchDepsDevVersions(ctx context.Context, scheme, packageName string, opts ...VersionFetchOption) ([]string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	system, err := depsDevSystem(scheme)
+	if err != nil {
+		return nil, err
+	}
+	packageName = strings.TrimSpace(packageName)
+	if packageName == "" {
+		return nil, fmt.Errorf("package name is required")
+	}
+
+	cfg := applyVersionFetchOptions(opts)
+	endpoint := cfg.depsDevBaseURL + "/systems/" + escapeURLPathSegment(system) + "/packages/" + escapeURLPathSegment(packageName)
+	var payload depsDevPackageResponse
+	if err := fetchJSON(ctx, cfg.httpClient, cfg.userAgent, endpoint, "deps.dev package versions", &payload); err != nil {
+		return nil, err
+	}
+
+	versions := make([]string, 0, len(payload.Versions))
+	for _, version := range payload.Versions {
+		if version.VersionKey.Version != "" {
+			versions = append(versions, version.VersionKey.Version)
+		}
+	}
+	return versions, nil
+}
+
+func fetchEcosystemsVersions(ctx context.Context, scheme, packageName string, opts ...VersionFetchOption) ([]string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	cfg := applyVersionFetchOptions(opts)
+	registry := cfg.ecosystemsRegistry
+	if registry == "" {
+		var err error
+		registry, err = ecosystemsRegistry(scheme)
+		if err != nil {
+			return nil, err
+		}
+	}
+	packageName = strings.TrimSpace(packageName)
+	if packageName == "" {
+		return nil, fmt.Errorf("package name is required")
+	}
+
+	endpoint := cfg.ecosystemsBaseURL + "/registries/" + escapeURLPathSegment(registry) + "/packages/" + escapeURLPathSegment(packageName) + "/version_numbers"
+	if cfg.ecosystemsMailto != "" {
+		endpoint += "?mailto=" + url.QueryEscape(cfg.ecosystemsMailto)
+	}
+
+	var versions []string
+	err := fetchJSON(ctx, cfg.httpClient, cfg.userAgent, endpoint, "ecosyste.ms package versions", &versions)
+	if err != nil {
+		return nil, err
+	}
+	return versions, nil
+}
+
+type depsDevPackageResponse struct {
+	Versions []depsDevPackageVersion `json:"versions"`
+}
+
+type depsDevPackageVersion struct {
+	VersionKey depsDevVersionKey `json:"versionKey"`
+}
+
+type depsDevVersionKey struct {
+	Version string `json:"version"`
+}
+
+func applyVersionFetchOptions(opts []VersionFetchOption) versionFetchConfig {
+	cfg := versionFetchConfig{
+		depsDevBaseURL:    defaultDepsDevBaseURL,
+		ecosystemsBaseURL: defaultEcosystemsBaseURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		userAgent: defaultUserAgent,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.depsDevBaseURL == "" {
+		cfg.depsDevBaseURL = defaultDepsDevBaseURL
+	}
+	if cfg.ecosystemsBaseURL == "" {
+		cfg.ecosystemsBaseURL = defaultEcosystemsBaseURL
+	}
+	return cfg
+}
+
+func depsDevSystem(scheme string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(scheme)) {
+	case "npm":
+		return "NPM", nil
+	case "pypi":
+		return "PYPI", nil
+	case "gem", "rubygems":
+		return "RUBYGEMS", nil
+	case "maven":
+		return "MAVEN", nil
+	case "nuget":
+		return "NUGET", nil
+	case "cargo":
+		return "CARGO", nil
+	case "go", "golang":
+		return "GO", nil
+	default:
+		return "", fmt.Errorf("unsupported deps.dev scheme %q", scheme)
+	}
+}
+
+func ecosystemsRegistry(scheme string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(scheme)) {
+	case "npm":
+		return "npmjs.org", nil
+	case "pypi":
+		return "pypi.org", nil
+	case "gem", "rubygems":
+		return "rubygems.org", nil
+	case "maven":
+		return "repo1.maven.org", nil
+	case "nuget":
+		return "nuget.org", nil
+	case "cargo":
+		return "crates.io", nil
+	case "go", "golang":
+		return "proxy.golang.org", nil
+	case "composer", "packagist":
+		return "packagist.org", nil
+	default:
+		return "", fmt.Errorf("unsupported ecosyste.ms scheme %q", scheme)
+	}
+}
+
+func schemeFromVersURI(constraint string) (string, error) {
+	trimmed := strings.TrimSpace(constraint)
+	if !strings.HasPrefix(trimmed, "vers:") {
+		return "", fmt.Errorf("scheme is required when constraint is not a vers URI")
+	}
+	rest := strings.TrimPrefix(trimmed, "vers:")
+	scheme, _, ok := strings.Cut(rest, "/")
+	if !ok || strings.TrimSpace(scheme) == "" {
+		return "", fmt.Errorf("invalid vers URI: %s", constraint)
+	}
+	return scheme, nil
+}
+
+func fetchJSON(ctx context.Context, client *http.Client, userAgent, endpoint, description string, dst any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("create %s request: %w", description, err)
+	}
+	req.Header.Set("Accept", "application/json")
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("fetch %s: %w", description, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorResponseBodyBytes))
+		return fmt.Errorf("%s request failed with status %d: %s", description, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSuccessResponseBodyBytes+1))
+	if err != nil {
+		return fmt.Errorf("read %s response: %w", description, err)
+	}
+	if len(body) > maxSuccessResponseBodyBytes {
+		return fmt.Errorf("%s response exceeds %d bytes", description, maxSuccessResponseBodyBytes)
+	}
+
+	if err := json.Unmarshal(body, dst); err != nil {
+		return fmt.Errorf("decode %s response: %w", description, err)
+	}
+	return nil
+}
+
+func escapeURLPathSegment(value string) string {
+	escaped := url.PathEscape(value)
+	return strings.ReplaceAll(escaped, "@", "%40")
+}
