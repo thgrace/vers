@@ -37,6 +37,8 @@ type versionCmpInput struct {
 func loadTestFile(t *testing.T, filename string) *versTestFile {
 	t.Helper()
 	path := filepath.Join("testdata", "vers-spec", "tests", filename)
+	// Test fixtures are loaded from a fixed repository-local directory.
+	//nolint:gosec
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("failed to read test file %s: %v", filename, err)

@@ -12,10 +12,10 @@ type Interval struct {
 }
 
 // NewInterval creates a new interval with the given bounds.
-func NewInterval(min, max string, minInclusive, maxInclusive bool) Interval {
+func NewInterval(lower, upper string, minInclusive, maxInclusive bool) Interval {
 	return Interval{
-		Min:          min,
-		Max:          max,
+		Min:          lower,
+		Max:          upper,
 		MinInclusive: minInclusive,
 		MaxInclusive: maxInclusive,
 	}
