@@ -620,20 +620,20 @@ func (p *Parser) parseBracketRange(s string) (*Range, error) {
 		return Exact(strings.TrimSpace(parts[0])), nil
 	}
 
-	min := strings.TrimSpace(parts[0])
-	max := strings.TrimSpace(parts[1])
+	lower := strings.TrimSpace(parts[0])
+	upper := strings.TrimSpace(parts[1])
 
 	interval := Interval{
-		Min:          min,
-		Max:          max,
+		Min:          lower,
+		Max:          upper,
 		MinInclusive: minInclusive,
 		MaxInclusive: maxInclusive,
 	}
 
-	if min == "" {
+	if lower == "" {
 		interval.Min = ""
 	}
-	if max == "" {
+	if upper == "" {
 		interval.Max = ""
 	}
 

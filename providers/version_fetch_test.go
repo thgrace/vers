@@ -223,7 +223,7 @@ func TestMatchingVersionsFromProviderRequiresSchemeForNativeConstraint(t *testin
 }
 
 func TestFetchVersionsHTTPError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 	}))
 	defer server.Close()
@@ -242,7 +242,7 @@ func TestFetchVersionsHTTPError(t *testing.T) {
 }
 
 func TestFetchVersionsSuccessBodyTooLarge(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeResponse(t, w, strings.Repeat(" ", maxSuccessResponseBodyBytes+1))
 	}))
 	defer server.Close()
